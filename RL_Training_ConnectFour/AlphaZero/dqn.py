@@ -10,7 +10,6 @@ import numpy.typing as npt
 import torch
 import random
 import pickle
-from env import Connect4Game
 from accelerate import Accelerator
 
 def get_possible_locations(board):
@@ -43,19 +42,17 @@ def get_random_move(board):
 class DQNAgent():
     def __init__(
             self, 
-            env, 
             output_channels
     ):        
         self.accelerator = Accelerator()
-        self.env = env
-        self.dqn = DQN(output_channels)
+        self.dqn = DQN(output_channels).to('cuda')
         self.replay_buffer = ReplayMemory(
             capacity=1000,
             device=self.accelerator.device,
         )
         self.optimizer = optim.AdamW(
             self.dqn.parameters(),
-            lr=self.learning_rate,
+            lr=0.001,
             betas=(0.9, 0.95),
         )
         self.criterion = MSELoss().to(self.accelerator.device)
@@ -99,14 +96,14 @@ class DQNAgent():
         if to_log:
             self.history.append((get_valid_locations(np.array(game_state[0])), game_state[-1]))
 
-    def update_env(self, env):
-        self.env = env
     
-    def reset(self, env):
-        self.env = env
+    def reset(self, i, val_or_pol):
         if len(self.history) > 0:
             self.total_history.append(self.history)
         self.history = []
+        if i % 5000 == 0:
+            self.record(i)
+        self.save_networks(val_or_pol)
 
     def record(self, i):
         if len(self.total_history) != 0:
@@ -114,6 +111,12 @@ class DQNAgent():
             with open(file_path, 'wb') as file:
                 pickle.dump(self.total_history, file)
             self.total_history = []
+
+    def save_networks(self, val_or_pol):
+        if val_or_pol == 0:
+            torch.save(self.dqn.state_dict(), "policy_network.pth")
+        else:
+            torch.save(self.dqn.state_dict(), "value_network.pth")
 
 class DQN(nn.Module):
     def __init__(self, output_channels = 7):

@@ -12,15 +12,9 @@ import numpy as np
 import random 
 from copy import deepcopy
 
-# def load_or_initialize_model(model_path, env, output_channels):
-#     model = DQNAgent(env, output_channels)
-#     if os.path.exists(model_path):
-#         model.dqn.load_state_dict(torch.load(model_path))
-#     return model
-
 def target_policy(game, tree):
-    prob_dist = np.array([0, 0, 0, 0, 0, 0, 0])
-    valid_moves = [x[1] for x in get_valid_locations(node.board)]
+    prob_dist = np.zeros(7)
+    valid_moves = [x[1] for x in get_valid_locations(game.board)]
     for i in range(len(valid_moves)):
         prob_dist[valid_moves[i]] = tree.N[tree.children[game][i]]
     prob_dist /= np.sum(prob_dist)
@@ -42,7 +36,7 @@ def main():
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         env = MCTS()
-        for i in tqdm(range(0, args.g)):
+        for i in tqdm(range(0, args.g + 1)):
             env.reset()
             game = ConnectFourBoard()
             play_data = []
@@ -59,12 +53,13 @@ def main():
             for game_state in play_data:
                 value = -value
                 game_state[2] = value
-                env.policy_network.update_values(game_state, 0, args.s)
-                env.value_network.update_values(game_state, 1, args.s)
-            env.policy_network.train()
-            env.value_network.train()
+                env.policy_network.update_values(game_state, 0, args.s, i)
+                env.value_network.update_values(game_state, 1, args.s, i)
+            env.policy_network.reset(i, 0)
+            env.value_network.reset(i, 1)
         
     else: 
+        pass
         # results = []
         # for i in tqdm(range(0, 1000)):
         #     while True:

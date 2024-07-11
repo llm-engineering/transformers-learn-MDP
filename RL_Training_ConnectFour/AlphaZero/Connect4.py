@@ -9,11 +9,11 @@ class ConnectFourBoard:
 
     def find_children(self):
         if self.terminal:
-            return set()
-        children = set()
+            return []
+        children = []
         for col in range(7):
             if self.board[0][col] == 0:  # Check if the top cell of the column is empty
-                children.add(self.make_move(col))
+                children.append(self.make_move(col))
         return children
 
     def find_random_child(self):

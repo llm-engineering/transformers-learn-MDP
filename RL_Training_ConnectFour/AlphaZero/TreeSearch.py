@@ -93,16 +93,12 @@ class MCTS:
             node = self.UCT(node)  
 
     def expand(self, node):
-
-        # Already Contained in Dictionary
-        if node in self.children:
-            return  
         
         obs_tensor = torch.tensor(node.board, dtype=torch.float32)
 
         with torch.no_grad():
-            policy = self.policy_network(obs_tensor).numpy().flatten()
-            value = self.value_network(obs_tensor).item()
+            policy = self.policy_network.dqn(obs_tensor).cpu().numpy().flatten()
+            value = self.value_network.dqn(obs_tensor).item()
 
         #pr vector
 
@@ -117,9 +113,16 @@ class MCTS:
         self.P[node] = policy
         self.Q[node] = value
 
+        # Already Contained in Dictionary
+        if node in self.children or node.is_terminal():
+            return policy, value
+
         # Update Dictionary
         self.children[node] = node.find_children()
         for i in range(len(valid_moves)):
+            # print(range(len(valid_moves)))
+            # print(self.children[node])
+            # print(node.board)
             self.Pr[self.children[node][i]] = policy[i]
 
         return policy, value
@@ -153,6 +156,7 @@ class MCTS:
         assert all(n in self.children for n in self.children[node])
 
         for idx, child in enumerate(self.children[node]):
+            highest_uct = float('-inf')
             uct = self.Q[child] + self.Pr[child] * (
                     math.sqrt(self.N[node]) / (1 + self.N[child]))
             if uct > highest_uct:
@@ -160,10 +164,6 @@ class MCTS:
                 highest_index = idx
 
         return self.children[node][highest_index]
-    
-    def save_networks(self):
-        torch.save(self.policy_network.state_dict(), "policy_network.pth")
-        torch.save(self.value_network.state_dict(), "value_network.pth")
 
     def reset(self):
         self.Q = defaultdict(float)  
