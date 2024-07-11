@@ -8,7 +8,7 @@ import numpy as np
 def load_or_initialize_model(model_path, output_channels):
     model = DQNAgent(output_channels)
     if os.path.exists(model_path):
-        model.load_state_dict(torch.load(model_path))
+        model.dqn.load_state_dict(torch.load(model_path))
     model.prepare()
     return model
 

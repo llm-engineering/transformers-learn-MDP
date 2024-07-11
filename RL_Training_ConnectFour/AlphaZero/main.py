@@ -41,7 +41,7 @@ def main():
             game = ConnectFourBoard()
             play_data = []
             while True:
-                for _ in range(200):
+                for _ in range(50):
                     env.rollout(game)
                 best_child = env.choose(game)[0]
                 #print(best_child)
