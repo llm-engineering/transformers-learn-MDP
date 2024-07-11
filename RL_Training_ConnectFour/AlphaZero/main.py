@@ -13,7 +13,7 @@ import random
 from copy import deepcopy
 
 def target_policy(game, tree):
-    prob_dist = np.zeros(7)
+    prob_dist = np.zeros(7, dtype=np.float32)
     valid_moves = [x[1] for x in get_valid_locations(game.board)]
     for i in range(len(valid_moves)):
         prob_dist[valid_moves[i]] = tree.N[tree.children[game][i]]
@@ -44,17 +44,19 @@ def main():
                 for _ in range(200):
                     env.rollout(game)
                 best_child = env.choose(game)[0]
+                #print(best_child)
                 best_move = best_child.last_move
                 play_data.append([deepcopy(torch.tensor(game.board)), target_policy(game, env), 0, game.last_move, best_move])
-                game.make_move(best_move[1])
+                game = game.make_move(best_move[1])
+                #print(game.to_pretty_string())
                 if game.is_terminal():
                     break
-            value = game.find_reward(game.turn)
+            value = float(game.find_reward(game.turn))
             for game_state in play_data:
                 value = -value
                 game_state[2] = value
-                env.policy_network.update_values(game_state, 0, args.s, i)
-                env.value_network.update_values(game_state, 1, args.s, i)
+                env.policy_network.update_values(game_state, 0, args.s)
+                env.value_network.update_values(game_state, 1, args.s)
             env.policy_network.reset(i, 0)
             env.value_network.reset(i, 1)
         

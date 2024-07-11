@@ -93,7 +93,7 @@ class ConnectFourBoard:
 
         return None
 
-    # def to_pretty_string(self):
-    #     symbols = {1: 'X', 2: 'O', 0: '.'}
-    #     rows = [" ".join(symbols[cell] for cell in row) for row in self.board]
-    #     return "\n" + "\n".join(rows) + "\n"
+    def to_pretty_string(self):
+        symbols = {1: 'X', -1: 'O', 0: '.'}
+        rows = [" ".join(symbols[cell] for cell in row) for row in self.board]
+        return "\n" + "\n".join(rows) + "\n"

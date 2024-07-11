@@ -76,7 +76,7 @@ class DQNAgent():
 
     def update_values(self, game_state, val_or_pol, to_log):
         self.replay_buffer.push(game_state[0], game_state[1], game_state[2])
-        minibatch = self.replay_buffer.sample(self.minibatch_size)
+        minibatch = self.replay_buffer.sample(32)
         outputs, labels = [], []
         for sample in minibatch:
             if val_or_pol == 0:
@@ -86,9 +86,15 @@ class DQNAgent():
             output = self.dqn(sample["current_state"])
             outputs.append(output)
             labels.append(target)
+        # print(outputs)
+        # print(labels)
         outputs = torch.stack(outputs).to(self.accelerator.device)
-        labels = torch.tensor(labels).to(self.accelerator.device)
+        if val_or_pol == 0: 
+            labels = torch.stack(labels).to(self.accelerator.device)
+        else: 
+            labels = torch.tensor(labels).to(self.accelerator.device)
         loss = self.criterion(outputs, labels)
+        #print(type(loss))
         self.optimizer.zero_grad()
         self.accelerator.backward(loss)
         self.optimizer.step()
@@ -107,7 +113,7 @@ class DQNAgent():
 
     def record(self, i):
         if len(self.total_history) != 0:
-            file_path = os.path.join("connect_4_data", "data_agent_" + str(self.player) + "_games_" + str(i) + ".pkl")
+            file_path = os.path.join("connect_4_data_alphazero", "data_games_" + str(i) + ".pkl")
             with open(file_path, 'wb') as file:
                 pickle.dump(self.total_history, file)
             self.total_history = []
@@ -150,14 +156,14 @@ class ReplayMemory():
             self,
             state: torch.Tensor, 
             policy: torch.Tensor, 
-            value: torch.Tensor, 
+            value: int, 
     ):
         if len(self.memory) < self.capacity:
             self.memory.append(None)
         self.memory[self.position] = {
             "current_state": state.to(self.device),
             "policy": policy.to(self.device),
-            "value": value.to(self.device)
+            "value": value
         }
         self.position = (self.position + 1) % self.capacity
 
