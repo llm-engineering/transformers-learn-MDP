@@ -37,7 +37,7 @@ class MCTS:
 
         self.P = dict()
 
-
+        
     def choose(self, node):
 
         if node.is_terminal():
@@ -51,11 +51,11 @@ class MCTS:
             if self.N[child] == 0:
                 child_score = float("-inf")
             else:
-                child_score = self.Q[child] / self.N[child]
+                child_score = self.Q[child]
             move_representation = getattr(child, 'last_move', 'Unknown move')
             monte_carlo_candidates.append([move_representation, child_score])
 
-        best_child = max(self.children[node], key=lambda n: float("-inf") if self.N[n] == 0 else self.Q[n] / self.N[n])
+        best_child = max(self.children[node], key=lambda n: float("-inf") if self.N[n] == 0 else self.Q[n])
         
         return (best_child, monte_carlo_candidates)
 
@@ -66,8 +66,6 @@ class MCTS:
         path = self.select(node)
         leaf = path[-1]
         p, v = self.expand(leaf)
-        #reward = self.simulate(leaf)
-        reward = 0
         self.backpropagate(path, v)
 
     def select(self, node):
@@ -120,25 +118,10 @@ class MCTS:
         # Update Dictionary
         self.children[node] = node.find_children()
         for i in range(len(valid_moves)):
-            # print(range(len(valid_moves)))
-            # print(self.children[node])
-            # print(node.board)
             self.Pr[self.children[node][i]] = policy[i]
 
         return policy, value
 
-
-    def simulate(self, node):
-        pass
-        # #Change this function essentially
-        # invert_reward = True
-
-        # while not node.is_terminal():
-        #     node = node.find_random_child()[0]
-        #     invert_reward = not invert_reward
-
-        # reward = node.reward()
-        # return 1 - reward if invert_reward else reward
 
     def backpropagate(self, path, v):
         

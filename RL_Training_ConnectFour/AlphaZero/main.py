@@ -26,13 +26,14 @@ def main():
     parser.add_argument('-t', action='store_true', help='Train Mode')
     parser.add_argument('-s', action='store_true', help='Store Data')
     parser.add_argument('-g', type=int, default=1000000, help="Number Of Games")
+    parser.add_argument('-r', type=int, default=1, help="seed")
     args = parser.parse_args()
    
     if args.t:
-        torch.manual_seed(1)
-        np.random.seed(1)
-        random.seed(1)
-        torch.cuda.manual_seed(1)
+        torch.manual_seed(args.r)
+        np.random.seed(args.r)
+        random.seed(args.r)
+        torch.cuda.manual_seed(args.r)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
         env = MCTS()
@@ -61,26 +62,27 @@ def main():
             env.value_network.reset(i, 1)
         
     else: 
-        pass
-        # results = []
-        # for i in tqdm(range(0, 1000)):
-        #     while True:
-        #         _, move_1 = agent_1.get_action(False)
-        #         reward_1, done = env.step(move_1, 1)
-        #         if done: #hit a terminal state
-        #             results.append(env.state.find_winner(env.state.board, env.state.last_move[0], env.state.last_move[1]))
-        #             break
-        #         move_2 = get_random_move(env.state.board)
-        #         reward_2, done = env.step(move_2, 2)
-        #         if done: #hit a terminal state
-        #             results.append(env.state.find_winner(env.state.board, env.state.last_move[0], env.state.last_move[1]))
-        #             break
-        #         agent_1.update_env(env)
-        #     env.reset()
-        #     agent_1.reset(env, i, False)
-        # print(results.count(1))
-        # print(results.count(2))
-        # print(results.count(None))
+        results = []
+        for i in tqdm(range(0, 1000)):
+            env.reset()
+            game = ConnectFourBoard()
+            while True:
+                for _ in range(50):
+                    env.rollout(game)
+                best_child = env.choose(game)[0]
+                best_move = best_child.last_move
+                game = game.make_move(best_move[1])
+                if game.is_terminal():
+                    results.append(game.find_winner())
+                    break
+                move_2 = get_random_move(game.board)
+                game = game.make_move(move_2)
+                if game.is_terminal():
+                    results.append(game.find_winner())
+                    break
+        print(results.count(1))
+        print(results.count(-1))
+        print(results.count(None))
 
 if __name__ == "__main__":
     main()
