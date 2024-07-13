@@ -62,6 +62,7 @@ def main():
             env.value_network.reset(i, 1)
         
     else: 
+        env = MCTS()
         results = []
         for i in tqdm(range(0, 1000)):
             env.reset()
@@ -73,12 +74,12 @@ def main():
                 best_move = best_child.last_move
                 game = game.make_move(best_move[1])
                 if game.is_terminal():
-                    results.append(game.find_winner())
+                    results.append(game.find_winner(game.board, game.last_move[0], game.last_move[1]))
                     break
                 move_2 = get_random_move(game.board)
                 game = game.make_move(move_2)
                 if game.is_terminal():
-                    results.append(game.find_winner())
+                    results.append(game.find_winner(game.board, game.last_move[0], game.last_move[1]))
                     break
         print(results.count(1))
         print(results.count(-1))
