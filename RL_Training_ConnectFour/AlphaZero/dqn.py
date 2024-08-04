@@ -42,7 +42,8 @@ def get_random_move(board):
 class DQNAgent():
     def __init__(
             self, 
-            output_channels
+            output_channels,
+            criterion
     ):        
         self.accelerator = Accelerator()
         self.dqn = DQN(output_channels).to('cuda')
@@ -52,29 +53,18 @@ class DQNAgent():
         )
         self.optimizer = optim.AdamW(
             self.dqn.parameters(),
-            lr=0.001,
+            lr=0.0001,
             betas=(0.9, 0.95),
         )
-        self.criterion = MSELoss().to(self.accelerator.device)
         self.history = []
         self.total_history = []
-        self.accelerator = Accelerator()
+        self.criterion = criterion.to(self.accelerator.device)
 
     def prepare(self):
         self.dqn, self.optimizer = self.accelerator.prepare(self.dqn, self.optimizer)
 
-    # def get_action(self, random_enabled):
-    #     output = self.dqn(torch.tensor(self.env.state.board))
-    #     if random_enabled and random.random() < self.epsilon:
-    #         action = self.env.action_space_sample()
-    #     else:
-    #         possible_actions = [xy[1] for xy in get_valid_locations(self.env.state.board)]
-    #         mask = torch.full(output.shape, float('-inf')).to('cuda')
-    #         mask[0][possible_actions] = output[0][possible_actions]
-    #         action = torch.argmax(mask).item()
-    #     return output, action
-
     def update_values(self, game_state, val_or_pol, to_log):
+        #print(game_state[0].shape)
         self.replay_buffer.push(game_state[0], game_state[1], game_state[2])
         minibatch = self.replay_buffer.sample(32)
         outputs, labels = [], []
@@ -100,7 +90,7 @@ class DQNAgent():
         self.optimizer.step()
 
         if to_log:
-            self.history.append((get_valid_locations(np.array(game_state[0])), game_state[-1]))
+            self.history.append((get_valid_locations(np.array(game_state[0][2])), game_state[-1]))
 
     
     def reset(self, i, val_or_pol):
@@ -125,9 +115,10 @@ class DQNAgent():
             torch.save(self.dqn.state_dict(), "value_network.pth")
 
 class DQN(nn.Module):
-    def __init__(self, output_channels = 7):
+    def __init__(self, output_channels):
         super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 128, kernel_size=(2, 2), stride=1, padding=0)
+        self.output_channels = output_channels
+        self.conv1 = nn.Conv2d(3, 128, kernel_size=(2, 2), stride=1, padding=0)
         self.fc1 = nn.Linear(128 * 5 * 6, 64)  # Adjusted for the output size of the convolution
         self.fc2 = nn.Linear(64, 64)
         self.output = nn.Linear(64, output_channels) 
@@ -141,6 +132,8 @@ class DQN(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.output(x)
+        if self.output_channels == 1:
+            x = F.log_softmax(x, dim=1)
         return x
     
 

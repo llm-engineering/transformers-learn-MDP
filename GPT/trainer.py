@@ -77,5 +77,7 @@ def train_model(model, train_loader, optimizer, accelerator):
     train_data = accelerator.gather(train_data).sum()
     
     accelerator.print('Training Loss:', (train_loss / train_data).item())
+
+    return train_loss
     
 

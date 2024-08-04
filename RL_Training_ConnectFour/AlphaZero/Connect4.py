@@ -24,15 +24,6 @@ class ConnectFourBoard:
         col = choice(empty_columns)
         return (self.make_move(col), col)
 
-    # def reward(self):
-    #     if not self.terminal:
-    #         raise RuntimeError("reward called on nonterminal board")
-    #     if self.winner == self.turn:
-    #         return 1
-    #     elif self.winner is None:
-    #         return 0.5
-    #     else:
-    #         return 0
         
     def find_reward(self, player):
         if self.winner is None:

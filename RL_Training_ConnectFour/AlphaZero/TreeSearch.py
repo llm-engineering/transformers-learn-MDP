@@ -4,9 +4,10 @@ from dqn import DQNAgent, get_valid_locations
 import os
 import torch
 import numpy as np
+from torch.nn import MSELoss, KLDivLoss
 
-def load_or_initialize_model(model_path, output_channels):
-    model = DQNAgent(output_channels)
+def load_or_initialize_model(model_path, output_channels, criterion):
+    model = DQNAgent(output_channels, criterion)
     if os.path.exists(model_path):
         model.dqn.load_state_dict(torch.load(model_path))
     model.prepare()
@@ -31,9 +32,9 @@ class MCTS:
         # Trade-Off Between Exploration/Exploitation
         self.alpha = alpha
 
-        self.policy_network = load_or_initialize_model('policy_network.pth', 7)
+        self.policy_network = load_or_initialize_model('policy_network.pth', 7, KLDivLoss(reduction='batchmean'))
 
-        self.value_network = load_or_initialize_model('value_network.pth', 1)
+        self.value_network = load_or_initialize_model('value_network.pth', 1, MSELoss())
 
         self.P = dict()
 
@@ -65,7 +66,7 @@ class MCTS:
 
         path = self.select(node)
         leaf = path[-1]
-        p, v = self.expand(leaf)
+        p, v = self.expand(leaf, path)
         self.backpropagate(path, v)
 
     def select(self, node):
@@ -90,9 +91,14 @@ class MCTS:
             
             node = self.UCT(node)  
 
-    def expand(self, node):
+    def expand(self, node, path):
         
-        obs_tensor = torch.tensor(node.board, dtype=torch.float32)
+        three_moves = []
+        for i in range(len(path) - 1, max(-1, len(path) - 4), -1):
+            three_moves.insert(0, path[i].board)
+        while len(three_moves) < 3:
+            three_moves.insert(0, [[0 for _ in range(7)] for _ in range(6)])
+        obs_tensor = torch.tensor(three_moves, dtype=torch.float32)
 
         with torch.no_grad():
             policy = self.policy_network.dqn(obs_tensor).cpu().numpy().flatten()
@@ -109,7 +115,7 @@ class MCTS:
             policy /= sum(policy)
 
         self.P[node] = policy
-        self.Q[node] = value
+        # self.Q[node] = value
 
         # Already Contained in Dictionary
         if node in self.children or node.is_terminal():
@@ -124,13 +130,11 @@ class MCTS:
 
 
     def backpropagate(self, path, v):
-        
-        # Back Propagating Values
-
         for node in reversed(path):
-            v = -v  
+            # v = -v  
             self.N[node] += 1
             self.Q[node] = ((self.N[node] - 1) * self.Q[node] + v)/ self.N[node]
+            v = -v
 
     def UCT(self, node):
         

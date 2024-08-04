@@ -4,7 +4,7 @@ import math
 import argparse
 
 #path should be what the directory of data is 
-path = ''
+path = r'C:\Users\wmasi\Documents\TF-Agent-States\RL_Training_ConnectFour'
 
 def load_data(path):
     if os.path.exists(path):
@@ -62,22 +62,24 @@ num_gpus = 8
 def main():
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', type='int', default=0, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
+    parser.add_argument('-m', type=int, default=0, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
     args = parser.parse_args()
 
-    for i in range(1, num_gpus + 1):
-        j = 0
+    for i in range(1, 11):
+        j = 5000
         training_hist = []
         q_hist = []
-        new_path_first_half = path + str(i)
+        new_path_first_half = path
         while True:
-            new_path_second_half_1 = rf'connect_4_data\data_agent_1_games_{j}.pkl'
-            new_path_second_half_2 = rf'connect_4_data\data_agent_-1_games_{j}.pkl'
-            train_output_path_second_half = rf'training_data\training_games_{j}.pkl'
+            new_path_second_half_1 = rf'connect-4-data\{i}\connect_4_data\data_agent_1_games_{j}.pkl'
+            new_path_second_half_2 = rf'connect-4-data\{i}\connect_4_data\data_agent_-1_games_{j}.pkl'
+            train_output_path_second_half = rf'training_data\{i}\training_games_{j}'
             train_output_path = os.path.join(new_path_first_half, train_output_path_second_half)
-            q_output_path_second_half = rf'training_data\q_vals_games_{j}.pkl'
+            #print(train_output_path)
+            q_output_path_second_half = rf'training_data\{i}\q_vals_games_{j}.pkl'
             q_output_path = os.path.join(new_path_first_half, q_output_path_second_half)
             games_1 = load_data(os.path.join(new_path_first_half, new_path_second_half_1))
+            #print(os.path.join(new_path_first_half, new_path_second_half_1))
             if games_1 is None:
                 break
             games_2 = load_data(os.path.join(new_path_first_half, new_path_second_half_2))
@@ -86,7 +88,7 @@ def main():
                 training_hist.append(temp_training_hist)
                 q_hist.append(temp_q_hist)
             j += 5000
-        with open(train_output_path + "_mode_" + str(args.m), 'wb') as f:
+        with open(train_output_path + "_mode_" + str(args.m) + '.pkl', 'wb') as f:
             pickle.dump(training_hist, f)
         with open(q_output_path, 'wb') as f:
             pickle.dump(q_hist, f)   
