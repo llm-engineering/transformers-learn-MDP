@@ -2,6 +2,7 @@ import pickle
 import os
 import math
 import argparse
+from tqdm import tqdm
 
 #path should be what the directory of data is 
 path = r'C:\Users\wmasi\Documents\TF-Agent-States\RL_Training_ConnectFour'
@@ -46,11 +47,16 @@ def generate_xy_pair(player_1_ep, player_2_ep, mode):
 
     q_vals = []
     for i in range(len(full_game) - 1):
-        if i % 2 == 0: #state is player 1's move, meaning it's player 2's turn
-            q_vals.append([(full_game[i], player_2_ep[math.ceil(i / 2)][1]), player_2_ep[math.ceil(i / 2)][-1][1]])
+        if mode == 1:
+            if i % 2 == 0: #state is player 1's move, meaning it's player 2's turn
+                q_vals.append([(full_game[i], player_2_ep[math.ceil(i / 2)][1]), player_2_ep[math.ceil(i / 2)][-1][1]])
+            else:
+                q_vals.append([(full_game[i], player_1_ep[math.ceil(i / 2)][1]), player_1_ep[math.ceil(i / 2)][-1][1]])
         else:
-            q_vals.append([(full_game[i], player_1_ep[math.ceil(i / 2)][1]), player_1_ep[math.ceil(i / 2)][-1][1]])
-
+            if i % 2 == 0: #state is player 1's move, meaning it's player 2's turn
+                q_vals.append([(full_game[i], player_2_ep[math.ceil(i / 2)][1]), player_2_ep[math.ceil(i / 2)][-1]])
+            else:
+                q_vals.append([(full_game[i], player_1_ep[math.ceil(i / 2)][1]), player_1_ep[math.ceil(i / 2)][-1]])
     if mode != 2:
         return (full_game[:-1], full_game[1:]), q_vals
     else:
@@ -65,8 +71,8 @@ def main():
     parser.add_argument('-m', type=int, default=0, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
     args = parser.parse_args()
 
-    for i in range(1, 11):
-        j = 5000
+    for i in tqdm(range(1, 11)):
+        j = 890000
         training_hist = []
         q_hist = []
         new_path_first_half = path
@@ -88,9 +94,11 @@ def main():
                 training_hist.append(temp_training_hist)
                 q_hist.append(temp_q_hist)
             j += 5000
+        print(len(training_hist))
+        print(len(q_hist))
         with open(train_output_path + "_mode_" + str(args.m) + '.pkl', 'wb') as f:
             pickle.dump(training_hist, f)
-        with open(q_output_path, 'wb') as f:
+        with open(q_output_path + "_mode_" + str(args.m) + '.pkl', 'wb') as f:
             pickle.dump(q_hist, f)   
         
 if __name__ == "__main__":

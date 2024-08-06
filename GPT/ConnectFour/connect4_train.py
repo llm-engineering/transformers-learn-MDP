@@ -4,6 +4,8 @@ import pickle
 import shutil
 import torch
 import argparse
+import random
+from tqdm import tqdm
 
 sys.path.append('../')
 
@@ -13,7 +15,7 @@ from model import Config, GPTModel
 from trainer import train_model, validate_model
 from torch.utils.data import DataLoader
 
-def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, save_directory = None, epochs = 15):
+def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, seed, save_directory = "", epochs = 15):
     
     accelerator = Accelerator()
 
@@ -36,7 +38,7 @@ def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers,
     train_losses = []
     valid_losses = []
 
-    for epoch in range(epochs):
+    for epoch in tqdm(range(epochs)):
         accelerator.print(f'Epoch {epoch}')
 
         train_loss = train_model(model, train_loader, optimizer, accelerator)
@@ -48,7 +50,7 @@ def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers,
         if accelerator.is_main_process:
             print(f'Validation Loss: {valid_loss:.8f}')
 
-            model_save_path = f"Model_{epoch+1}_mode_{mode}.pth"
+            model_save_path = f"model_{epoch+1}_mode_{mode}_seed_{seed}.pth"
             accelerator.save(accelerator.unwrap_model(model).state_dict(), model_save_path)
 
             if valid_loss < min_loss:
@@ -60,15 +62,17 @@ def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers,
     if accelerator.is_main_process:
         shutil.copy(model_path, save_directory)
 
-    with open(f'train_losses_mode_{mode}.pkl', 'wb') as f:
+    with open(f'train_losses_mode_{mode}_seed_{seed}.pkl', 'wb') as f:
         pickle.dump(train_losses, f)
-    with open(f'valid_losses_mode_{mode}.pkl', 'wb') as f:
+    with open(f'valid_losses_mode_{mode}_seed_{seed}.pkl', 'wb') as f:
         pickle.dump(valid_losses, f)
+
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', type=int, default=0, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
+    parser.add_argument('-s', type=int, default=0, choices=[0, 1, 2], help='Seed')
     args = parser.parse_args()
     if args.m == 0:
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)}
@@ -86,27 +90,27 @@ def main():
     num_layers = 8
     dropout = 0.1
 
-    path = r'C:\Users\wmasi\Documents\TF-Agent-States\RL_Training_ConnectFour'
+    path = ''
 
-    with open(os.path.join(path, rf'\training_data\1\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/1/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent1 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\2\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/2/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent2 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\3\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/3/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent3 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\4\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
-        agent4 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\5\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    # with open(os.path.join(path, rf'training_data\4\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    #     agent4 = pickle.load(f)
+    with open(os.path.join(path, rf'training_data/5/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent5 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\6\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/6/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent6 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\7\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/7/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent7 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\8\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/8/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent8 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\9\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/9/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent9 = pickle.load(f)
-    with open(os.path.join(path, rf'\training_data\10\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+    with open(os.path.join(path, rf'training_data/10/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent10 = pickle.load(f)
 
     train_ratio = 0.8
@@ -115,7 +119,7 @@ def main():
     d1 = len(agent1)
     d2 = len(agent2)
     d3 = len(agent3)
-    d4 = len(agent4)
+    # d4 = len(agent4)
     d5 = len(agent5)
     d6 = len(agent6)
     d7 = len(agent7)
@@ -135,9 +139,9 @@ def main():
     valid3 = agent3[int(train_ratio * d3):int((train_ratio + valid_ratio) * d3)]
     test3 = agent3[int((train_ratio + valid_ratio) * d3):]
 
-    train4 = agent4[:int(train_ratio * d4)]
-    valid4 = agent4[int(train_ratio * d4):int((train_ratio + valid_ratio) * d4)]
-    test4 = agent4[int((train_ratio + valid_ratio) * d4):]
+    # train4 = agent4[:int(train_ratio * d4)]
+    # valid4 = agent4[int(train_ratio * d4):int((train_ratio + valid_ratio) * d4)]
+    # test4 = agent4[int((train_ratio + valid_ratio) * d4):]
 
     train5 = agent5[:int(train_ratio * d5)]
     valid5 = agent5[int(train_ratio * d5):int((train_ratio + valid_ratio) * d5)]
@@ -164,9 +168,9 @@ def main():
     test10 = agent10[int((train_ratio + valid_ratio) * d10):]
 
 
-    train = train1 + train2 + train3 + train4 + train5 + train6 + train7 + train8 + train9 + train10
-    valid = valid1 + valid2 + valid3 + valid4 + valid5 + valid6 + valid7 + valid8 + valid9 + valid10
-    test = test1 + test2 + test3 + test4 + test5 + test6 + test7 + test8 + test9 + test10
+    train = train1 + train2 + train3 + train5 + train6 + train7 + train8 + train9 + train10
+    valid = valid1 + valid2 + valid3 + valid5 + valid6 + valid7 + valid8 + valid9 + valid10
+    test = test1 + test2 + test3 + test5 + test6 + test7 + test8 + test9 + test10
 
     print(len(train))
     print(len(valid))
@@ -176,5 +180,8 @@ def main():
     valid_dataset = EpisodeDataset(valid, token_to_idx)
     test_dataset = EpisodeDataset(test, token_to_idx)
 
-    train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m)
+    train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m, args.s, "best_model")
+
+if __name__ == "__main__":
+    main()
 
