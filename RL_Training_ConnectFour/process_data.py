@@ -37,13 +37,18 @@ def generate_xy_pair(player_1_ep, player_2_ep, mode):
             full_game.append(player_1_ep[i][-1][-1])
             full_game.append(player_2_ep[i][-1][-1])
     if max == 1:
-        full_game.append(player_1_ep[-1][-1])
+        if mode != 1:
+            full_game.append(player_1_ep[-1][-1])
+        else:
+            full_game.append(player_1_ep[-1][-1][-1])
     elif max == 2:
-        full_game.append(player_2_ep[-1][-1])
-    
+        if mode != 1:
+            full_game.append(player_2_ep[-1][-1])
+        else:
+            full_game.append(player_1_ep[-1][-1][-1])
+     
     if mode == 2:
-        for i in range(len(full_game) - 1):
-            full_game_2.append(full_game[i][-1])
+        full_game_2 = [x[1] for x in full_game][1:]
 
     q_vals = []
     for i in range(len(full_game) - 1):
