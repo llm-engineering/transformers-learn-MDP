@@ -1,4 +1,4 @@
-# TF-Agent-States
+# Transformers-Learn-MDP-Transitions
 This is the codebase for the paper *Transformers Learn Transition Dynamics when Trained to Predict Markov Decision Processes*.
 
 Through the code above, we achieve the process of training and testing the probes used in the experiment. The exact process is outlined as follows:
