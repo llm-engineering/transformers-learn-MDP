@@ -79,8 +79,8 @@ def train_probe(train_dataset : Dataset, valid_dataset : Dataset, device, epochs
     for epoch in range(epochs):
 
         probe.train()
-        train_loss = 0.0
-        train_data = 0
+        train_loss = torch.tensor(0.0).to(device)
+        train_data = torch.tensor(0.0).to(device)
 
         for X, y in train_loader:
             X, y = X.float().to(device), y.float().to(device)
@@ -112,8 +112,8 @@ def validate_probe(probe, valid_loader, device):
 
     criterion = nn.MSELoss()
     probe.eval()
-    total_loss = 0.0
-    total_data = 0
+    total_loss = torch.tensor(0.0).to(device)
+    total_data = torch.tensor(0.0).to(device)
 
     with torch.no_grad():
         for X, y in valid_loader:

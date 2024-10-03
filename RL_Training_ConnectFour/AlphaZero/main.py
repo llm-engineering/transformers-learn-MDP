@@ -40,18 +40,20 @@ def main():
         for i in tqdm(range(0, args.g + 1)):
             env.reset()
             game = ConnectFourBoard()
+            full_game = [game.board, game.board]
             play_data = []
+            j = 0
             while True:
                 for _ in range(50):
                     env.rollout(game)
                 best_child = env.choose(game)[0]
-                #print(best_child)
                 best_move = best_child.last_move
-                play_data.append([deepcopy(torch.tensor(game.board)), target_policy(game, env), 0, game.last_move, best_move])
+                full_game.append(game.board)
+                play_data.append([deepcopy(torch.tensor(full_game[j:j+3])), target_policy(game, env), 0, game.last_move, best_move])
                 game = game.make_move(best_move[1])
-                #print(game.to_pretty_string())
                 if game.is_terminal():
                     break
+                j += 1
             value = float(game.find_reward(game.turn))
             for game_state in play_data:
                 value = -value

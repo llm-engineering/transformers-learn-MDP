@@ -7,22 +7,22 @@ class ConnectFourBoard:
         self.last_move = None
         self.move_history = []
 
-    # def find_children(self):
-    #     if self.terminal:
-    #         return set()
-    #     children = set()
-    #     for col in range(7):
-    #         if self.board[0][col] == 0:  # Check if the top cell of the column is empty
-    #             children.add(self.make_move(col))
-    #     return children
+    def find_children(self):
+        if self.terminal:
+            return set()
+        children = set()
+        for col in range(7):
+            if self.board[0][col] == 0:  # Check if the top cell of the column is empty
+                children.add(self.make_move(col))
+        return children
 
-    # def find_random_child(self):
-    #     from random import choice
-    #     if self.terminal:
-    #         return None
-    #     empty_columns = [col for col in range(7) if self.board[0][col] == 0]
-    #     col = choice(empty_columns)
-    #     return (self.make_move(col), col)
+    def find_random_child(self):
+        from random import choice
+        if self.terminal:
+            return None
+        empty_columns = [col for col in range(7) if self.board[0][col] == 0]
+        col = choice(empty_columns)
+        return (self.make_move(col), col)
 
     def reward(self):
         if not self.terminal:
