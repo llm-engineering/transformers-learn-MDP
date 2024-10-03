@@ -4,16 +4,19 @@ import pickle
 import shutil
 import torch
 import argparse
-import random
 from tqdm import tqdm
 
 sys.path.append('../')
 
-from accelerate import Accelerator, notebook_launcher
+from accelerate import Accelerator
 from dataset import EpisodeDataset, collate_fn
 from model import Config, GPTModel
 from trainer import train_model, validate_model
 from torch.utils.data import DataLoader
+
+"""
+Training pipeline for transformer on Connect-4 data generated through MCTS.
+"""
 
 def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, seed, save_directory = None, epochs = 15):
     
@@ -83,11 +86,9 @@ def main():
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)} | {i: i + 44 for i in range(7)}
         vocab_size = 51
     token_to_idx['<pad>'] = 0  # Padding token
-    block_size = 42 # Honestly this could probably be whatever
+    block_size = 42 
     embed_size = 512
-    num_heads = 8
     num_layers = 8
-    dropout = 0.1
     
     path = ''
 
@@ -109,7 +110,6 @@ def main():
 
     train_dataset = EpisodeDataset(train, token_to_idx)
     valid_dataset = EpisodeDataset(valid, token_to_idx)
-    test_dataset = EpisodeDataset(test, token_to_idx)
 
     train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m, args.s, "best_model")
 

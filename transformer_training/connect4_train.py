@@ -4,16 +4,19 @@ import pickle
 import shutil
 import torch
 import argparse
-import random
 from tqdm import tqdm
 
 sys.path.append('../')
 
-from accelerate import Accelerator, notebook_launcher
+from accelerate import Accelerator
 from dataset import EpisodeDataset, collate_fn
 from model import Config, GPTModel
 from trainer import train_model, validate_model
 from torch.utils.data import DataLoader
+
+"""
+Training pipeline for transformer on Connect-4 RL data.
+"""
 
 def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, seed, save_directory = "", epochs = 15):
     
@@ -84,11 +87,9 @@ def main():
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)} | {i: i + 44 for i in range(7)}
         vocab_size = 51
     token_to_idx['<pad>'] = 0  # Padding token
-    block_size = 42 # Honestly this could probably be whatever
+    block_size = 42 
     embed_size = 512
-    num_heads = 8
     num_layers = 8
-    dropout = 0.1
 
     path = ''
 
@@ -98,8 +99,8 @@ def main():
         agent2 = pickle.load(f)
     with open(os.path.join(path, rf'training_data/3/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent3 = pickle.load(f)
-    # with open(os.path.join(path, rf'training_data\4\training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
-    #     agent4 = pickle.load(f)
+    with open(os.path.join(path, rf'training_data/4/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
+        agent4 = pickle.load(f)
     with open(os.path.join(path, rf'training_data/5/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
         agent5 = pickle.load(f)
     with open(os.path.join(path, rf'training_data/6/training_games_1000000_mode_{args.m}.pkl'), 'rb') as f:
@@ -119,7 +120,7 @@ def main():
     d1 = len(agent1)
     d2 = len(agent2)
     d3 = len(agent3)
-    # d4 = len(agent4)
+    d4 = len(agent4)
     d5 = len(agent5)
     d6 = len(agent6)
     d7 = len(agent7)
@@ -139,9 +140,9 @@ def main():
     valid3 = agent3[int(train_ratio * d3):int((train_ratio + valid_ratio) * d3)]
     test3 = agent3[int((train_ratio + valid_ratio) * d3):]
 
-    # train4 = agent4[:int(train_ratio * d4)]
-    # valid4 = agent4[int(train_ratio * d4):int((train_ratio + valid_ratio) * d4)]
-    # test4 = agent4[int((train_ratio + valid_ratio) * d4):]
+    train4 = agent4[:int(train_ratio * d4)]
+    valid4 = agent4[int(train_ratio * d4):int((train_ratio + valid_ratio) * d4)]
+    test4 = agent4[int((train_ratio + valid_ratio) * d4):]
 
     train5 = agent5[:int(train_ratio * d5)]
     valid5 = agent5[int(train_ratio * d5):int((train_ratio + valid_ratio) * d5)]
@@ -168,9 +169,9 @@ def main():
     test10 = agent10[int((train_ratio + valid_ratio) * d10):]
 
 
-    train = train1 + train2 + train3 + train5 + train6 + train7 + train8 + train9 + train10
-    valid = valid1 + valid2 + valid3 + valid5 + valid6 + valid7 + valid8 + valid9 + valid10
-    test = test1 + test2 + test3 + test5 + test6 + test7 + test8 + test9 + test10
+    train = train1 + train2 + train3 + train4 + train5 + train6 + train7 + train8 + train9 + train10
+    valid = valid1 + valid2 + valid3 + valid4 + valid5 + valid6 + valid7 + valid8 + valid9 + valid10
+    test = test1 + test2 + test3 + test4 + test5 + test6 + test7 + test8 + test9 + test10
 
     print(len(train))
     print(len(valid))
@@ -178,7 +179,6 @@ def main():
 
     train_dataset = EpisodeDataset(train, token_to_idx)
     valid_dataset = EpisodeDataset(valid, token_to_idx)
-    test_dataset = EpisodeDataset(test, token_to_idx)
 
     train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m, args.s, "best_model")
 
