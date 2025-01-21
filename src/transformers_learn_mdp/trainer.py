@@ -39,10 +39,10 @@ def validate_model(model, valid_loader, accelerator):
     else:
         return None
 
-def train_model(model, train_loader, optimizer, accelerator):
+def train_model(model, train_loader, optimizer, accelerator, scheduler=None):
 
     model.train()
-    criterion = nn.CrossEntropyLoss(ignore_index=0, reduction = 'none')
+    criterion = nn.CrossEntropyLoss(ignore_index=0, reduction = 'none', label_smoothing=0.0)
 
     train_loss = torch.tensor(0.0).to(accelerator.device)
     train_data = torch.tensor(0.0).to(accelerator.device)
@@ -67,9 +67,32 @@ def train_model(model, train_loader, optimizer, accelerator):
         loss = loss_sum / data_sum
         accelerator.backward(loss)
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
 
         train_loss += loss_sum.item() 
         train_data += mask.sum().item()
+        
+        
+        grad_norms = []
+    
+        for param in model.parameters():
+            if param.grad is not None:
+                grad_norms.append(param.grad.norm().item())
+
+        if len(grad_norms) == 0:
+            return None  # No gradients yet (e.g., before first backward pass)
+    
+        grad_tensor = torch.tensor(grad_norms)
+    
+        stats = {
+            "mean": grad_tensor.mean().item(),
+            "max": grad_tensor.max().item(),
+            "std": grad_tensor.std().item(),
+            "p95": grad_tensor.quantile(0.95).item()
+        }
+
+        #accelerator.print('Gradient norm:', stats)
 
     accelerator.wait_for_everyone()
     
@@ -78,6 +101,9 @@ def train_model(model, train_loader, optimizer, accelerator):
     
     accelerator.print('Training Loss:', (train_loss / train_data).item())
 
-    return train_loss
+    if accelerator.is_main_process:
+        return (train_loss / train_data).item()
+    else:
+        return None
     
 

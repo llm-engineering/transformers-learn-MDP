@@ -4,9 +4,8 @@ import pickle
 import shutil
 import torch
 import argparse
+import wandb
 from tqdm import tqdm
-
-#sys.path.append('../')
 
 from accelerate import Accelerator
 from .dataset import EpisodeDataset, collate_fn
@@ -17,22 +16,25 @@ from torch.utils.data import DataLoader
 from .data_utils import information_parser
 
 
+wandb.init(project="mdp-learning")
+
+
 """
 Training pipeline for transformer on Connect-4 data generated through MCTS.
 """
-
-def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, seed, save_directory = None, epochs = 15):
+def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, seed, save_directory = None, epochs = 50):
     
     accelerator = Accelerator()
 
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=collate_fn)
-    valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=True, collate_fn=collate_fn)
+    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, collate_fn=collate_fn)
+    valid_loader = DataLoader(valid_dataset, batch_size=128, shuffle=True, collate_fn=collate_fn)
 
-    config = Config(vocab_size, block_size, n_layer=num_layers, n_head=num_layers, n_embd=embed_size)
+    config = Config(vocab_size, block_size, n_layer=num_layers, n_head=num_layers // 2, n_embd=embed_size)
     model = GPTModel(config)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.01)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = epochs)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.005, steps_per_epoch=len(train_loader), epochs=epochs)
+    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = epochs)
     
     train_loader, valid_loader, model, scheduler, optimizer = accelerator.prepare(train_loader, valid_loader, model, scheduler, optimizer)
 
@@ -46,15 +48,20 @@ def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers,
 
     for epoch in tqdm(range(epochs)):
         accelerator.print(f'Epoch {epoch}')
+        wandb.log({"Epoch": epoch})
 
-        train_loss = train_model(model, train_loader, optimizer, accelerator)
+        train_loss = train_model(model, train_loader, optimizer, accelerator, scheduler)
         valid_loss = validate_model(model, valid_loader, accelerator)
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
         scheduler.step()
 
+        #print("Learning Rate: ", scheduler.get_last_lr())
+
         if accelerator.is_main_process:
-            print(f'Validation Loss: {valid_loss:.8f}')
+            val_loss_str = f'Validation loss {valid_loss:.8f}'
+            wandb.log({"Validation Loss": valid_loss, "Training Loss": train_loss})
+            accelerator.print(val_loss_str)
 
             model_save_path = f"model_{epoch+1}_mode_{mode}_seed_{seed}.pth"
             accelerator.save(accelerator.unwrap_model(model).state_dict(), model_save_path)
@@ -72,11 +79,13 @@ def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers,
         pickle.dump(train_losses, f)
     with open(f'valid_losses_mode_{mode}_seed_{seed}.pkl', 'wb') as f:
         pickle.dump(valid_losses, f)
+    
+    wandb.finish()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-m', type=int, default=1, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
+    parser.add_argument('-m', type=int, default=0, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
     parser.add_argument('-s', type=int, default=23456, choices=[0, 1, 2], help='Seed')
     parser.add_argument('-i', type=str, help='Input Path')
     args = parser.parse_args()
@@ -90,8 +99,8 @@ def main():
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)} | {i: i + 44 for i in range(7)}
         vocab_size = 51
     token_to_idx['<pad>'] = 0  # Padding token
-    block_size = 42 
-    embed_size = 512
+    block_size = 52
+    embed_size = 64
     num_layers = 8
     
     path = ''
@@ -100,7 +109,6 @@ def main():
         data = f.readlines()
         data = information_parser(data)
         agent1 = [[action for (_,action) in x] for x in data]
-        agent1 = [(actions[:-1], actions[1:]) for actions in agent1]    
 
 
     train_ratio = 0.8
@@ -119,7 +127,7 @@ def main():
     train_dataset = EpisodeDataset(train, token_to_idx)
     valid_dataset = EpisodeDataset(valid, token_to_idx)
 
-    #train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m, args.s, "best_model")
+    train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m, args.s, "best_model")
 
 if __name__ == "__main__":
     main()
