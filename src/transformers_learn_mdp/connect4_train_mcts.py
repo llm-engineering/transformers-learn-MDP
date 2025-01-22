@@ -3,9 +3,10 @@ import sys
 import pickle
 import shutil
 import torch
-import argparse
 import wandb
 from tqdm import tqdm
+import hydra
+from omegaconf import DictConfig, OmegaConf, open_dict
 
 from accelerate import Accelerator
 from .dataset import EpisodeDataset, collate_fn
@@ -14,57 +15,95 @@ from .trainer import train_model, validate_model
 from torch.utils.data import DataLoader
 
 from .data_utils import information_parser
+from enum import Enum
 
 
-wandb.init(project="mdp-learning")
+class Mode(Enum):
+    STATE = 0
+    ACTION = 1
+    STATE_ACTION = 2
 
 
-"""
-Training pipeline for transformer on Connect-4 data generated through MCTS.
-"""
-def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, mode, seed, save_directory = None, epochs = 50):
-    
+def train(training_config, training_dataset, validation_dataset, token_to_idx, wandb):
+
+    train_dataset = EpisodeDataset(training_dataset, token_to_idx)
+    valid_dataset = EpisodeDataset(validation_dataset, token_to_idx)
+
     accelerator = Accelerator()
 
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, collate_fn=collate_fn)
-    valid_loader = DataLoader(valid_dataset, batch_size=128, shuffle=True, collate_fn=collate_fn)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=training_config.batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+    )
+    valid_loader = DataLoader(
+        valid_dataset,
+        batch_size=training_config.batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+    )
 
-    config = Config(vocab_size, block_size, n_layer=num_layers, n_head=num_layers // 2, n_embd=embed_size)
+    config = Config(
+        training_config.vocab_size,
+        training_config.seq_len,
+        n_layer=training_config.num_layers,
+        n_head=training_config.num_heads,
+        n_embd=training_config.embedding_size,
+    )
     model = GPTModel(config)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.01)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.005, steps_per_epoch=len(train_loader), epochs=epochs)
-    #scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = epochs)
-    
-    train_loader, valid_loader, model, scheduler, optimizer = accelerator.prepare(train_loader, valid_loader, model, scheduler, optimizer)
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=training_config.lr,
+        weight_decay=training_config.weight_decay,
+    )
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=0.0006,
+        steps_per_epoch=len(train_loader),
+        epochs=training_config.epochs,
+    )
+    # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = epochs)
+
+    train_loader, valid_loader, model, scheduler, optimizer = accelerator.prepare(
+        train_loader, valid_loader, model, scheduler, optimizer
+    )
 
     epoch = 0
 
     model_path = None
     min_loss = 1e10
-    
+
     train_losses = []
     valid_losses = []
 
-    for epoch in tqdm(range(epochs)):
-        accelerator.print(f'Epoch {epoch}')
+    for epoch in tqdm(range(training_config.epochs), desc="Epoch"):
+        accelerator.print(f"Epoch {epoch}")
         wandb.log({"Epoch": epoch})
 
-        train_loss = train_model(model, train_loader, optimizer, accelerator, scheduler)
+        train_loss = train_model(
+            model, train_loader, optimizer, accelerator, scheduler, wandb
+        )
         valid_loss = validate_model(model, valid_loader, accelerator)
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
         scheduler.step()
 
-        #print("Learning Rate: ", scheduler.get_last_lr())
+        # print("Learning Rate: ", scheduler.get_last_lr())
+
+        mode = training_config.mode
+        seed = training_config.seed
 
         if accelerator.is_main_process:
-            val_loss_str = f'Validation loss {valid_loss:.8f}'
+            val_loss_str = f"Validation loss {valid_loss:.8f}"
             wandb.log({"Validation Loss": valid_loss, "Training Loss": train_loss})
             accelerator.print(val_loss_str)
 
             model_save_path = f"model_{epoch+1}_mode_{mode}_seed_{seed}.pth"
-            accelerator.save(accelerator.unwrap_model(model).state_dict(), model_save_path)
+            accelerator.save(
+                accelerator.unwrap_model(model).state_dict(), model_save_path
+            )
 
             if valid_loss < min_loss:
                 min_loss = valid_loss
@@ -73,62 +112,68 @@ def train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers,
         accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        shutil.copy(model_path, save_directory)
+        shutil.copy(model_path, training_config.save_directory)
 
-    with open(f'train_losses_mode_{mode}_seed_{seed}.pkl', 'wb') as f:
+    with open(f"train_losses_mode_{mode}_seed_{seed}.pkl", "wb") as f:
         pickle.dump(train_losses, f)
-    with open(f'valid_losses_mode_{mode}_seed_{seed}.pkl', 'wb') as f:
+    with open(f"valid_losses_mode_{mode}_seed_{seed}.pkl", "wb") as f:
         pickle.dump(valid_losses, f)
-    
+
     wandb.finish()
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-m', type=int, default=0, choices=[0, 1, 2], help='Data Mode (state, action, state-action)')
-    parser.add_argument('-s', type=int, default=23456, choices=[0, 1, 2], help='Seed')
-    parser.add_argument('-i', type=str, help='Input Path')
-    args = parser.parse_args()
-    if args.m == 0:
+def split_dataset(data, train_ratio, valid_ratio):
+    train = data[: int(train_ratio * len(data))]
+    valid = data[
+        int(train_ratio * len(data)) : int((train_ratio + valid_ratio) * len(data))
+    ]
+    test = data[int((train_ratio + valid_ratio) * len(data)) :]
+    return train, valid, test
+
+
+def mode_to_token_to_idx(mode):
+    if mode == 0:
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)}
         vocab_size = 43
-    elif args.m == 1:
+    elif mode == 1:
         token_to_idx = {i: i + 1 for i in range(7)}
         vocab_size = 8
-    elif args.m == 2:
-        token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)} | {i: i + 44 for i in range(7)}
+    elif mode == 2:
+        token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)} | {
+            i: i + 44 for i in range(7)
+        }
         vocab_size = 51
-    token_to_idx['<pad>'] = 0  # Padding token
-    block_size = 52
-    embed_size = 64
-    num_layers = 8
-    
-    path = ''
+    token_to_idx["<pad>"] = 0  # Padding token
+    return token_to_idx, vocab_size
 
-    with open(args.i, 'r') as f:
+
+@hydra.main(version_base=None, config_path="../../conf", config_name="config")
+def main(cfg: DictConfig) -> None:
+
+    training_config = cfg.training
+
+    mode = training_config.mode
+    token_to_idx, vocab_size = mode_to_token_to_idx(mode)
+
+    # Make this a function
+    with open(training_config.data_path, "r") as f:
         data = f.readlines()
         data = information_parser(data)
-        agent1 = [[action for (_,action) in x] for x in data]
+        raw_dataset = [[action for (_, action) in x] for x in data]
 
 
-    train_ratio = 0.8
-    valid_ratio = 0.1
+    training_dataset, validation_dataset, test_dataset = split_dataset(
+        raw_dataset, training_config.train_ratio, training_config.val_ratio
+    )
 
-    d1 = len(agent1)
+    with open_dict(training_config):
+        training_config["vocab_size"] = vocab_size
+        training_config["dataset_length"] = len(raw_dataset)
 
-    train = agent1[:int(train_ratio * d1)]
-    valid = agent1[int(train_ratio * d1):int((train_ratio + valid_ratio) * d1) ]
-    test = agent1[int((train_ratio + valid_ratio) * d1): ]
+    wandb.init(project=cfg.wandb.project_name, config=dict(training_config))
 
-    print(len(train))
-    print(len(valid))
-    print(len(test))
+    train(training_config, training_dataset, validation_dataset, token_to_idx, wandb)
 
-    train_dataset = EpisodeDataset(train, token_to_idx)
-    valid_dataset = EpisodeDataset(valid, token_to_idx)
-
-    train_main(train_dataset, valid_dataset, vocab_size, block_size, num_layers, embed_size, args.m, args.s, "best_model")
 
 if __name__ == "__main__":
     main()
-

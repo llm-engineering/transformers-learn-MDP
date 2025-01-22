@@ -15,9 +15,9 @@ def validate_model(model, valid_loader, accelerator):
 
         for X_batch, Y_batch in valid_loader:
 
-            logits = model(X_batch)
+            logits = model(X_batch)[:,1::2,:].contiguous()  # Shape: [batch_size, seq_length, vocab_size]
             logits = logits.view(-1, logits.size(-1))  # Shape: [batch_size * seq_length, vocab_size]
-            Y_batch = Y_batch.view(-1)  # Shape: [batch_size * seq_length]
+            Y_batch = Y_batch[:,1::2].contiguous().view(-1)  # Shape: [batch_size * seq_length]
 
             # Assuming the padding token index is 0
             padding_token_index = 0
@@ -39,7 +39,7 @@ def validate_model(model, valid_loader, accelerator):
     else:
         return None
 
-def train_model(model, train_loader, optimizer, accelerator, scheduler=None):
+def train_model(model, train_loader, optimizer, accelerator, scheduler, wandb):
 
     model.train()
     criterion = nn.CrossEntropyLoss(ignore_index=0, reduction = 'none', label_smoothing=0.0)
@@ -50,10 +50,10 @@ def train_model(model, train_loader, optimizer, accelerator, scheduler=None):
     for X_batch, Y_batch in tqdm(train_loader, desc="Training"):
         
         optimizer.zero_grad()
-        logits = model(X_batch)
+        logits = model(X_batch)[:,1::2,:].contiguous()
 
         logits = logits.view(-1, logits.size(-1))  # Shape: [batch_size * seq_length, vocab_size]
-        Y_batch = Y_batch.view(-1)  # Shape: [batch_size * seq_length]
+        Y_batch = Y_batch[:,1::2].contiguous().view(-1)  # Shape: [batch_size * seq_length]
 
         padding_token_index = 0  # Assuming the padding token index is 0
         mask = (Y_batch != padding_token_index).float()
@@ -69,6 +69,7 @@ def train_model(model, train_loader, optimizer, accelerator, scheduler=None):
         optimizer.step()
         if scheduler is not None:
             scheduler.step()
+            wandb.log({"Learning Rate": scheduler.get_last_lr()[0]})
 
         train_loss += loss_sum.item() 
         train_data += mask.sum().item()
@@ -86,13 +87,14 @@ def train_model(model, train_loader, optimizer, accelerator, scheduler=None):
         grad_tensor = torch.tensor(grad_norms)
     
         stats = {
-            "mean": grad_tensor.mean().item(),
-            "max": grad_tensor.max().item(),
-            "std": grad_tensor.std().item(),
-            "p95": grad_tensor.quantile(0.95).item()
+            "grad_mean": grad_tensor.mean().item(),
+            "grad_max": grad_tensor.max().item(),
+            "grad_std": grad_tensor.std().item(),
+            "grad_p95": grad_tensor.quantile(0.95).item()
         }
 
         #accelerator.print('Gradient norm:', stats)
+        wandb.log(stats)
 
     accelerator.wait_for_everyone()
     

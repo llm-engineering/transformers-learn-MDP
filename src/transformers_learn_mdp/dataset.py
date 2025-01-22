@@ -36,7 +36,7 @@ class EpisodeDataset(Dataset):
         print("Tokenizing and packing the dataset")
         self.packed_data = []
 
-        self.tokenized_data = [[self.token_to_idx[token] for token in actions_to_col_row(sequence)] for sequence in data]
+        self.tokenized_data = [[self.token_to_idx[token] for token in sequence] for sequence in data]
         # flatten the list and insert padding value at the end of each sequence
         #self.data = []
         #for sequence in self.tokenized_data:
