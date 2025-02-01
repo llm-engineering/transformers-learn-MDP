@@ -4,30 +4,6 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 import tqdm 
 
-def actions_to_col_row(actions, board_height=6):
-    """
-    Converts a sequence of Connect4 column moves into (column, row) pairs.
-
-    Args:
-        actions (list): List of column indices (0-6) representing moves.
-        board_height (int): Number of rows in Connect4 (default: 6).
-
-    Returns:
-        list of tuples: [(col, row), ...] where row is where the piece lands.
-    """
-    heights = [0] * 7  # Track how filled each column is
-    col_row_sequence = []
-
-    for col in actions:
-        row = board_height - 1 - heights[col]  # Compute the landing row
-        if row < 0:
-            raise ValueError(f"Invalid move: Column {col} is full!")
-
-        col_row_sequence.append((row, col))
-        heights[col] += 1  # Update column height
-
-    return col_row_sequence
-
 
 class EpisodeDataset(Dataset):
     
@@ -36,7 +12,7 @@ class EpisodeDataset(Dataset):
         print("Tokenizing and packing the dataset")
         self.packed_data = []
 
-        self.tokenized_data = [[self.token_to_idx[token] for token in sequence] for sequence in data]
+        self.tokenized_data = [[51] + [self.token_to_idx[token] for token in sequence] + [51] for sequence in data]
         # flatten the list and insert padding value at the end of each sequence
         #self.data = []
         #for sequence in self.tokenized_data:
@@ -51,7 +27,7 @@ class EpisodeDataset(Dataset):
     
     def __getitem__(self, idx):
 
-        sequence =  self.data[idx]
+        sequence = self.data[idx]
 
         X_indices =  sequence[:-1]
         Y_indices =  sequence[1:]

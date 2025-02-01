@@ -1,18 +1,21 @@
 wandb:
-  project_name: "mdp-learning"
+  project_name: "board-representation-experiments"
+  id: "test-run-delete-soon-1"
 
 training:
-  mode: 1
+  mode: 2
   num_layers: 8
   num_heads: 4
-  batch_size: 128
-  seq_len: 52
+  batch_size: 64
+  seq_len: 100
   train_ratio: 0.8
   val_ratio: 0.1
   data_path: "info.txt"
-  epochs: 50
+  epochs: 5
   lr: 0.0001
   weight_decay: 0.01
-  save_directory: "./"
+  save_directory: "./save"
   embedding_size: 128
   seed: 1243
+  loss_type: 0
+  seq_type: 1

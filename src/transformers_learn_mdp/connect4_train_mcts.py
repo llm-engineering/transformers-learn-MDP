@@ -6,22 +6,17 @@ import torch
 import wandb
 from tqdm import tqdm
 import hydra
+import itertools
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from accelerate import Accelerator
 from .dataset import EpisodeDataset, collate_fn
 from .model import Config, GPTModel
-from .trainer import train_model, validate_model
+from .trainer import train_model, validate_model, Loss, Mode, SeqSubSet
 from torch.utils.data import DataLoader
 
-from .data_utils import information_parser
+from .data_utils import information_parser, actions_to_col_row
 from enum import Enum
-
-
-class Mode(Enum):
-    STATE = 0
-    ACTION = 1
-    STATE_ACTION = 2
 
 
 def train(training_config, training_dataset, validation_dataset, token_to_idx, wandb):
@@ -53,14 +48,19 @@ def train(training_config, training_dataset, validation_dataset, token_to_idx, w
     )
     model = GPTModel(config)
 
-    optimizer = torch.optim.AdamW(
+    #optimizer = torch.optim.AdamW(
+    #    model.parameters(),
+    #    lr=training_config.lr,
+    #    weight_decay=training_config.weight_decay,
+    #)
+    optimizer = torch.optim.SGD(
         model.parameters(),
         lr=training_config.lr,
         weight_decay=training_config.weight_decay,
     )
     scheduler = torch.optim.lr_scheduler.OneCycleLR(
         optimizer,
-        max_lr=0.0006,
+        max_lr=0.0005,
         steps_per_epoch=len(train_loader),
         epochs=training_config.epochs,
     )
@@ -78,17 +78,24 @@ def train(training_config, training_dataset, validation_dataset, token_to_idx, w
     train_losses = []
     valid_losses = []
 
+
+
+    # TODO: this is just pulling things out from a config
+    mode = Mode(training_config.mode)
+    loss_type = Loss(training_config.loss_type)
+    seq_type = SeqSubSet(training_config.seq_type)
+
     for epoch in tqdm(range(training_config.epochs), desc="Epoch"):
         accelerator.print(f"Epoch {epoch}")
         wandb.log({"Epoch": epoch})
 
         train_loss = train_model(
-            model, train_loader, optimizer, accelerator, scheduler, wandb
+            model, train_loader, optimizer, accelerator, scheduler, wandb, mode, loss_type, seq_type
         )
-        valid_loss = validate_model(model, valid_loader, accelerator)
+        valid_loss, p1_acc, p2_acc, total_acc = validate_model(model, valid_loader, accelerator, mode, loss_type, seq_type)
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
-        scheduler.step()
+        #scheduler.step()
 
         # print("Learning Rate: ", scheduler.get_last_lr())
 
@@ -97,7 +104,7 @@ def train(training_config, training_dataset, validation_dataset, token_to_idx, w
 
         if accelerator.is_main_process:
             val_loss_str = f"Validation loss {valid_loss:.8f}"
-            wandb.log({"Validation Loss": valid_loss, "Training Loss": train_loss})
+            wandb.log({"Validation Loss": valid_loss, "Training Loss": train_loss, "P1 Acc": p1_acc, "P2 Acc": p2_acc, "Total accuracy": total_acc})
             accelerator.print(val_loss_str)
 
             model_save_path = f"model_{epoch+1}_mode_{mode}_seed_{seed}.pth"
@@ -135,16 +142,23 @@ def mode_to_token_to_idx(mode):
     if mode == 0:
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)}
         vocab_size = 43
+        transformation = actions_to_col_row
     elif mode == 1:
         token_to_idx = {i: i + 1 for i in range(7)}
         vocab_size = 8
+        transformation = lambda x: x
     elif mode == 2:
         token_to_idx = {(i, j): i * 7 + j + 1 for i in range(6) for j in range(7)} | {
             i: i + 44 for i in range(7)
         }
         vocab_size = 51
+        transformation = lambda x: list(itertools.chain(*zip(x,actions_to_col_row(x))))
     token_to_idx["<pad>"] = 0  # Padding token
-    return token_to_idx, vocab_size
+
+    token_to_idx[51] = 51
+    vocab_size += 1
+
+    return token_to_idx, vocab_size, transformation
 
 
 @hydra.main(version_base=None, config_path="../../conf", config_name="config")
@@ -153,13 +167,13 @@ def main(cfg: DictConfig) -> None:
     training_config = cfg.training
 
     mode = training_config.mode
-    token_to_idx, vocab_size = mode_to_token_to_idx(mode)
+    token_to_idx, vocab_size, transformation = mode_to_token_to_idx(mode)
 
     # Make this a function
     with open(training_config.data_path, "r") as f:
         data = f.readlines()
         data = information_parser(data)
-        raw_dataset = [[action for (_, action) in x] for x in data]
+        raw_dataset = [transformation([action for (_, action) in x]) for x in data]
 
 
     training_dataset, validation_dataset, test_dataset = split_dataset(
@@ -170,7 +184,7 @@ def main(cfg: DictConfig) -> None:
         training_config["vocab_size"] = vocab_size
         training_config["dataset_length"] = len(raw_dataset)
 
-    wandb.init(project=cfg.wandb.project_name, config=dict(training_config))
+    wandb.init(project=cfg.wandb.project_name, config=dict(training_config), id=cfg.wandb.id)
 
     train(training_config, training_dataset, validation_dataset, token_to_idx, wandb)
 
