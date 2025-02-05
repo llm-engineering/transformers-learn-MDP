@@ -1,0 +1,21 @@
+wandb:
+  project_name: "board-representation-experiments-5th-feb"
+  id: "cross-entropy-gpt-warmup-scheduler-whole-seq-a"
+
+training:
+  mode: 2
+  num_layers: 8
+  num_heads: 4
+  batch_size: 64
+  seq_len: 100
+  train_ratio: 0.8
+  val_ratio: 0.1
+  data_path: "info.txt"
+  epochs: 15
+  lr: 0.00001
+  weight_decay: 0.09
+  save_directory: "./save"
+  embedding_size: 128
+  seed: 1243
+  loss_type: 0
+  seq_type: 0
