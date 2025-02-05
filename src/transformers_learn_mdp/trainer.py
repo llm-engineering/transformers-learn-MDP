@@ -214,7 +214,7 @@ def train_model(
 
         loss = loss_sum / data_sum
         accelerator.backward(loss)
-        # nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        nn.utils.clip_grad_norm_(model.parameters(), 5.0)
         optimizer.step()
         if scheduler is not None:
             scheduler.step()

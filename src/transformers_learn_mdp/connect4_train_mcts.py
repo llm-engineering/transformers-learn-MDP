@@ -18,6 +18,28 @@ from torch.utils.data import DataLoader
 from .data_utils import information_parser, actions_to_col_row
 from enum import Enum
 
+def get_lr_scheduler(optimizer, warmup_epochs, total_epochs, base_lr, max_lr):
+    """
+    Combines warmup and cosine annealing for learning rate scheduling.
+
+    Args:
+        optimizer: PyTorch optimizer
+        warmup_epochs: Number of warmup epochs
+        total_epochs: Total number of training epochs
+        base_lr: Starting learning rate (during warmup)
+        max_lr: Peak learning rate (after warmup)
+
+    Returns:
+        scheduler: Learning rate scheduler
+    """
+    def lr_lambda(epoch):
+        if epoch < warmup_epochs:
+            return 2*epoch  # Linear warmup
+        else:
+            return 10*epoch
+
+    return  torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
 
 def train(training_config, training_dataset, validation_dataset, token_to_idx, wandb):
 
@@ -48,23 +70,25 @@ def train(training_config, training_dataset, validation_dataset, token_to_idx, w
     )
     model = GPTModel(config)
 
-    #optimizer = torch.optim.AdamW(
-    #    model.parameters(),
-    #    lr=training_config.lr,
-    #    weight_decay=training_config.weight_decay,
-    #)
-    optimizer = torch.optim.SGD(
+    optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=training_config.lr,
         weight_decay=training_config.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=0.0005,
-        steps_per_epoch=len(train_loader),
-        epochs=training_config.epochs,
-    )
+    #optimizer = torch.optim.SGD(
+    #    model.parameters(),
+    #    lr=training_config.lr,
+    #    weight_decay=training_config.weight_decay,
+    #)
+    #scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    #    optimizer,
+    #    max_lr=0.0005,
+    #    steps_per_epoch=len(train_loader),
+    #    epochs=training_config.epochs,
+    #)
     # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = epochs)
+
+    scheduler = get_lr_scheduler(optimizer,5, training_config.epochs, 0.00001, 0.001)
 
     train_loader, valid_loader, model, scheduler, optimizer = accelerator.prepare(
         train_loader, valid_loader, model, scheduler, optimizer
@@ -90,12 +114,13 @@ def train(training_config, training_dataset, validation_dataset, token_to_idx, w
         wandb.log({"Epoch": epoch})
 
         train_loss = train_model(
-            model, train_loader, optimizer, accelerator, scheduler, wandb, mode, loss_type, seq_type
+            model, train_loader, optimizer, accelerator, None, wandb, mode, loss_type, seq_type
         )
         valid_loss, p1_acc, p2_acc, total_acc = validate_model(model, valid_loader, accelerator, mode, loss_type, seq_type)
         train_losses.append(train_loss)
         valid_losses.append(valid_loss)
-        #scheduler.step()
+        scheduler.step()
+        accelerator.print({"Learning Rate": scheduler.get_last_lr()[0]})
 
         # print("Learning Rate: ", scheduler.get_last_lr())
 
